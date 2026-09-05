@@ -1,0 +1,51 @@
+<odoo>
+    <!-- buat list to review approval request untuk memudahkan approver -->
+    <!-- buat list jika diklik langsung mengarah ke form dari res_id -->
+        <record id="view_approval_request_tree" model="ir.ui.view">
+        <field name="name">approval.request.tree</field>
+        <field name="model">universal_approval.request</field>
+        <field name="arch" type="xml">
+            <list string="Approval Requests" create="false" edit="false" delete="false">
+                <field name="id"/>
+                <field name="res_model"/>
+                <field name="res_id"/>
+                <field name="state"/>
+                <button name="open_document" type="object" string="View Document" class="btn-primary"/>
+            </list>
+        </field>
+    </record>
+    <!-- buat form readonly dengan tombol view document -->
+    <record id="view_approval_request_form" model="ir.ui.view">
+        <field name="name">approval.request.form</field>
+        <field name="model">universal_approval.request</field>
+        <field name="arch" type="xml">
+            <form string="Approval Request" create="false" edit="false" delete="false">
+                <sheet>
+                    <group>
+                        <field name="id"/>
+                        <field name="res_model"/>
+                        <field name="res_id"/>
+                        <field name="state"/>
+                    </group>
+                    <footer>
+                        <button name="open_document" type="object" string="View Document" class="btn-primary"/>
+                    </footer>
+                </sheet>
+            </form>
+        </field>
+    </record>
+    <!-- buat action dan filter untuk menampilkan approval request yang harus diapprove oleh user yang sedang login -->
+    <record id="action_approval_request" model="ir.actions.act_window">
+        <field name="name">Approval Requests</field>
+        <field name="res_model">universal_approval.request</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('user_id', '=', uid), ('state', '=', 'pending')]</field>
+    </record>
+    <record id="approval_request_filter" model="ir.filters">
+        <field name="name">My Approval Requests</field>
+        <field name="model_id" ref="model_universal_approval_request"/>
+        <field name="domain">[('user_id', '=', uid), ('state', '=', 'pending')]</field>
+        <field name="context">{'group_by': ['state']}</field>
+        <field name="is_default" eval="True"/>
+    </record>
+</odoo>

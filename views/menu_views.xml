@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- App Switcher / Root Menu Utama -->
+    <menuitem id="menu_universal_approval_root" 
+              name="Universal Approval" 
+              web_icon="universal_approval,static/description/icon.png" 
+              sequence="300"/>
+
+    <!-- Approval Request -->
+    <menuitem id="menu_approval_request" 
+              name="Approval Requests" 
+              parent="menu_universal_approval_root" 
+              action="action_approval_request" 
+              sequence="10"/>
+
+    <!-- Configuration Root Menu -->
+    <menuitem id="menu_universal_approval_config" 
+              name="Configuration" 
+              parent="menu_universal_approval_root" 
+              action="action_approval_config_tag" 
+              sequence="100" 
+              groups="base.group_system"/>
+    
+    <!-- Configuration Rule -->
+    <menuitem id="menu_approval_config" 
+              name="Approval Rules" 
+              parent="menu_universal_approval_config" 
+              action="action_approval_config" 
+              sequence="10"/>
+
+    <menuitem
+            id="menu_approval_config_tag"
+            name="Approval Tags"
+            parent="menu_universal_approval_config"
+            action="action_approval_config_tag"
+            sequence="20"
+    />
+
+</odoo>

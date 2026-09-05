@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<odoo>
+
+    <!-- List View -->
+    <record id="view_approval_config_tag_list" model="ir.ui.view">
+        <field name="name">universal.approval.config.tag.list</field>
+        <field name="model">universal_approval.config_tag</field>
+        <field name="arch" type="xml">
+            <list string="Approval Tags">
+                <field name="name"/>
+            </list>
+        </field>
+    </record>
+
+
+    <!-- Form View -->
+    <record id="view_approval_config_tag_form" model="ir.ui.view">
+        <field name="name">universal.approval.config.tag.form</field>
+        <field name="model">universal_approval.config_tag</field>
+        <field name="arch" type="xml">
+            <form string="Approval Tag">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+
+    <!-- Action -->
+    <record id="action_approval_config_tag" model="ir.actions.act_window">
+        <field name="name">Approval Tags</field>
+        <field name="res_model">universal_approval.config_tag</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+
+</odoo>

@@ -1,0 +1,18 @@
+<odoo>
+<!-- reject wizard -->
+    <record id="view_universal_approval_reject_wizard" model="ir.ui.view">
+        <field name="name">universal_approval.reject_wizard</field>
+        <field name="model">universal_approval.reject_wizard</field>
+        <field name="arch" type="xml">
+            <form string="Reject Approval">
+                <group>
+                    <field name="note" placeholder="Enter rejection reason..."/>
+                </group>
+                <footer>
+                    <button string="Reject" type="object" name="action_reject" class="btn-primary"/>
+                    <button string="Cancel" class="btn-secondary" special="cancel"/>
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>
