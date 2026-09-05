@@ -6,6 +6,10 @@ It allows administrators to define approval rules for different Odoo models with
 
 Models that need approval functionality only need to inherit the `universal_approval.mixin`.
 
+## Screenshot
+
+![Universal Approval Configuration](static/description/screenshot1.png)
+
 ## Features
 
 * Universal approval workflow for multiple Odoo models
@@ -720,12 +724,6 @@ universal_approval.reject_wizard
 ```
 
 Provides a wizard for entering rejection notes.
-
----
-
-# Screenshot
-
-![Universal Approval Configuration](static/description/screenshot1.png)
 
 ---
 
