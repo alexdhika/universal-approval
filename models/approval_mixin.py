@@ -58,65 +58,195 @@ class UniversalApprovalMixin(models.AbstractModel):
                 rec.current_approver_id = first_pending.user_id
             else:
                 rec.current_approver_id = False
-
-    def action_request_approval1(self):
-            """Mengevaluasi rule, mencegah duplikasi approver, dan membuat request approval"""
-            for rec in self:
-                rules = self.env['universal_approval.config'].search([
-                    ('model_id.model', '=', rec._name)
-                ], order='sequence asc')
-
-                # Cek jika sama sekali tidak ada konfigurasi rule untuk model ini
-                if not rules:
-                    raise UserError(
-                        _("Tidak dapat mengajukan approval! Belum ada aturan (Approval Rule) yang dibuat untuk model %s.") % rec._description
-                    )
-
-                matched_lines = []
-                for rule in rules:
-                    if not rule.domain or rule.domain == '[]':
-                        is_match = True
-                    else:
-                        eval_domain = safe_eval(rule.domain)
-                        full_domain = [('id', '=', rec.id)] + eval_domain
-                        is_match = self.env[rec._name].search_count(full_domain) > 0
-
-                    if is_match:
-                        lines = rule.approver_line_ids.sorted(key=lambda l: l.sequence)
-                        matched_lines.extend(lines)
-
-                if matched_lines:
-                    rec.approval_state = 'to_approve'
-
-                    # --- DE-DUPLIKASI APPROVER ---
-                    # Menggunakan dictionary untuk memastikan 1 user hanya punya 1 request di sequence terendah/pertamanya
-                    unique_approvers = {}
-                    for line in matched_lines:
-                        user_id = line.user_id.id
-                        # Jika user belum ada, atau menemukan sequence yang lebih rendah (lebih awal)
-                        if user_id not in unique_approvers or line.sequence < unique_approvers[user_id]:
-                            unique_approvers[user_id] = line.sequence
-
-                    # Cari sequence terendah secara keseluruhan untuk menentukan siapa yang 'pending' duluan
-                    min_sequence = min(unique_approvers.values())
-
-                    # Buat record approval.request tanpa duplikat
-                    for user_id, seq in unique_approvers.items():
-                        initial_state = 'pending' if seq == min_sequence else 'waiting'
-
-                        self.env['universal_approval.request'].create({
-                            'res_model': rec._name,
-                            'res_id': rec.id,
-                            'user_id': user_id,
-                            'sequence': seq,
-                            'state': initial_state,
-                        })
-
-                    rec._notify_next_approvers()
-                else:
-                    rec.approval_state = 'approved'
-
+                
     def action_request_approval(self):
+        """Mengevaluasi rule dan menyinkronkan approver berdasarkan
+        konfigurasi Approval Rule terbaru tanpa mereset state approved.
+        """
+        for rec in self:
+    
+            ApprovalRequest = self.env['universal_approval.request']
+    
+            # =========================================================
+            # 1. AMBIL RULE
+            # =========================================================
+    
+            rules = self.env['universal_approval.config'].search([
+                ('model_id.model', '=', rec._name)
+            ], order='sequence asc')
+    
+            if not rules:
+                raise UserError(
+                    _("Tidak dapat mengajukan approval! Belum ada aturan "
+                        "(Approval Rule) yang dibuat untuk model %s.")
+                    % rec._description
+                )
+    
+            # =========================================================
+            # 2. CARI RULE YANG MATCH
+            # =========================================================
+    
+            matched_lines = []
+    
+            for rule in rules:
+    
+                if not rule.domain or rule.domain == '[]':
+                    is_match = True
+                else:
+                    eval_domain = safe_eval(rule.domain)
+    
+                    full_domain = [
+                        ('id', '=', rec.id)
+                    ] + eval_domain
+    
+                    is_match = (
+                        self.env[rec._name].search_count(full_domain) > 0
+                    )
+    
+                if is_match:
+                    lines = rule.approver_line_ids.sorted(
+                        key=lambda l: l.sequence
+                    )
+    
+                    matched_lines.extend(lines)
+    
+            if not matched_lines:
+                raise UserError(
+                    _("Tidak dapat mengajukan approval karena tidak ada "
+                        "user yang menunggu approval!")
+                )
+    
+            # =========================================================
+            # 3. DEDUPLIKASI APPROVER
+            # =========================================================
+    
+            ordered_approvers = []
+            seen_users = set()
+    
+            for line in matched_lines:
+                user_id = line.user_id.id
+    
+                if user_id not in seen_users:
+                    seen_users.add(user_id)
+                    ordered_approvers.append(user_id)
+    
+            new_user_ids = set(ordered_approvers)
+    
+            # =========================================================
+            # 4. AMBIL REQUEST EXISTING
+            # =========================================================
+    
+            existing_requests = ApprovalRequest.search([
+                ('res_model', '=', rec._name),
+                ('res_id', '=', rec.id),
+            ])
+    
+            existing_by_user = {
+                request.user_id.id: request
+                for request in existing_requests
+            }
+    
+            # =========================================================
+            # 5. HAPUS APPROVER YANG SUDAH TIDAK ADA DI CONFIG
+            # =========================================================
+    
+            requests_to_remove = existing_requests.filtered(
+                lambda request: request.user_id.id not in new_user_ids
+            )
+    
+            if requests_to_remove:
+                requests_to_remove.unlink()
+    
+            # =========================================================
+            # 6. UPDATE EXISTING / CREATE APPROVER BARU
+            #
+            # Existing:
+            #   state dipertahankan dulu
+            #
+            # Baru:
+            #   sementara waiting
+            # =========================================================
+    
+            for idx, user_id in enumerate(ordered_approvers):
+    
+                sequence = (idx + 1) * 10
+    
+                existing_request = existing_by_user.get(user_id)
+    
+                if existing_request:
+    
+                    # Jangan ubah state existing
+                    existing_request.write({
+                        'sequence': sequence,
+                    })
+    
+                else:
+    
+                    ApprovalRequest.create({
+                        'res_model': rec._name,
+                        'res_id': rec.id,
+                        'user_id': user_id,
+                        'sequence': sequence,
+                        'state': 'waiting',
+                    })
+    
+            # =========================================================
+            # 7. AMBIL ULANG REQUEST BERDASARKAN URUTAN TERBARU
+            # =========================================================
+    
+            active_requests = ApprovalRequest.search([
+                ('res_model', '=', rec._name),
+                ('res_id', '=', rec.id),
+            ], order='sequence asc')
+    
+            # =========================================================
+            # 8. TENTUKAN PENDING BARU
+            #
+            # APPROVER PERTAMA YANG BELUM APPROVED = PENDING
+            # APPROVER BERIKUTNYA = WAITING
+            #
+            # APPROVER YANG SUDAH APPROVED TETAP APPROVED
+            # =========================================================
+    
+            pending_found = False
+    
+            for request in active_requests:
+    
+                if request.state == 'approved':
+                    # Jangan pernah mengubah approved
+                    continue
+    
+                if not pending_found:
+                    request.write({
+                        'state': 'pending',
+                    })
+    
+                    pending_found = True
+    
+                else:
+                    request.write({
+                        'state': 'waiting',
+                    })
+    
+            # =========================================================
+            # 9. UPDATE APPROVAL STATE
+            # =========================================================
+    
+            pending_requests = active_requests.filtered(
+                lambda request: request.state == 'pending'
+            )
+    
+            if pending_requests:
+                rec.approval_state = 'to_approve'
+    
+            # =========================================================
+            # 10. NOTIFY PENDING APPROVER
+            # =========================================================
+    
+            if pending_requests:
+                rec._notify_next_approvers()
+        
+    def action_request_approval1(self):
         """Mengevaluasi rule, mencegah duplikasi approver, dan membuat request approval"""
         for rec in self:
             rules = self.env['universal_approval.config'].search([
@@ -138,9 +268,12 @@ class UniversalApprovalMixin(models.AbstractModel):
                     is_match = self.env[rec._name].search_count(full_domain) > 0
 
                 if is_match:
-                    lines = rule.approver_line_ids.sorted(key=lambda l: l.sequence)
+                    lines = rule.approver_line_ids.sorted(key=lambda l: l.sequence)                    
                     matched_lines.extend(lines)
 
+            if not is_match:
+                raise UserError(_("Tidak dapat mengajukan approval! Tidak ada rule yang sesuai dengan baris ini."))
+                
             if matched_lines:
                 rec.approval_state = 'to_approve'
 
@@ -171,7 +304,7 @@ class UniversalApprovalMixin(models.AbstractModel):
 
                 rec._notify_next_approvers()
             else:
-                rec.approval_state = 'approved'
+                raise UserError(_("Tidak dapat mengajukan approval karena tidak ada user yang menunggu approval!"))
 
     def _get_approval_email_template(self):
         """Mendapatkan template email untuk notifikasi approval"""
@@ -182,24 +315,15 @@ class UniversalApprovalMixin(models.AbstractModel):
         """
         Fungsi pembantu untuk mengirim email dan activity ke user yang berstatus 'pending'
         """
+        
         for rec in self:
             pending_requests = rec.approval_request_ids.filtered(lambda r: r.state == 'pending')
             for req in pending_requests:
-                # Buat activity untuk user yang berstatus 'pending'
-                # rec.activity_schedule(
-                #     'mail.mail_activity_data_todo',
-                #     user_id=req.user_id.id,
-                #     note=_("Anda memiliki dokumen yang menunggu persetujuan: %s") % rec.display_name
-                # )
-                
-                # raise UserError(rec._name)
-                # Kirim email notifikasi (opsional, bisa diatur di template email)
-                # template = self.env.ref('universal_approval.email_template_approval_request', raise_if_not_found=False)
                 self.ensure_one()
         
                 # Ambil template (spesifik atau fallback)
                 template = self._get_approval_email_template()
-
+                
                 if template and req.user_id.email:
                     # 1. Ambil email perusahaan terkait dokumen (dukung Multi-Company)
                     company = getattr(rec, 'company_id', False) or self.env.company
@@ -208,7 +332,6 @@ class UniversalApprovalMixin(models.AbstractModel):
                         raise UserError(_("Email perusahaan belum diatur. Silakan atur email perusahaan di menu Settings > Companies."))
                     # Buat string subject secara presisi dari Python
 
-                    target_model = self.env['ir.model'].search([('model', '=', rec._name)], limit=1)
                     # Menggunakan with_context untuk memastikan model & res_id dikirim ke parser QWeb
                     template.send_mail(
                         rec.id,  # res_id dokumen (misal PO ID)
@@ -258,7 +381,7 @@ class UniversalApprovalMixin(models.AbstractModel):
         """Mengirim email ke user yang ditentukan di config setelah semua level disetujui"""
         for rec in self:
             # Cari konfigurasi untuk model ini
-            config = self.env['universal_approval.config'].search([
+            config = self.env['universal_approval.config'].sudo().search([
                 ('model_id.model', '=', rec._name)
             ], limit=1)
 
@@ -277,12 +400,12 @@ class UniversalApprovalMixin(models.AbstractModel):
                             # Kirim email sederhana (tanpa template khusus)
                             subject = _("Dokumen %s telah disetujui oleh semua level approver.") % rec.display_name
                             body = _("Dokumen %s telah disetujui oleh semua level approver. Silakan cek dokumen tersebut di sistem.") % rec.display_name
-                            self.env['mail.mail'].create({
+                            self.env['mail.mail'].sudo().create({
                                 'subject': subject,
                                 'body_html': body,
                                 'email_to': user.email,
                                 'email_from': company_email,
-                            }).send()
+                            })
 
     def _notify_rejection(self):
         """Mengirim email ke user yang ditentukan di config setelah ada request yang ditolak"""

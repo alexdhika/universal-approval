@@ -1,5 +1,5 @@
 from odoo import models, fields, api
-from odoo.exceptions import UserError
+from odoo.exceptions import UserError, ValidationError
 
 class UniversalApprovalConfig(models.Model):
     _name = 'universal_approval.config'
@@ -120,19 +120,29 @@ class UniversalApprovalConfig(models.Model):
         for rec in self:
             rec.allowed_model_ids = allowed_models
 
-    def tes_cek_inherit_model(self):
-        """
-        Fungsi ini untuk testing/debugging, menampilkan semua model yang meng-inherit universal_approval.mixin.
-        """
-        # ambil semua record dari model ir.model
-        all_models = self.env['ir.model'].search([])
-        cek_inherit = []
-        for model in all_models:
-            model_name = model.model
-            model_obj = self.env[model_name]
-            parents = getattr(model_obj, '_parents', [])
-            if model.id == 643:
-                raise UserError(f"Model: {model_name}, _parents: {parents}")
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+    
+        for record in records:
+            if not record.approver_line_ids:
+                raise ValidationError(
+                    'Minimal harus ada satu approver.'
+                )
+    
+        return records
+    
+    
+    def write(self, vals):
+        res = super().write(vals)
+    
+        for record in self:
+            if not record.approver_line_ids:
+                raise ValidationError(
+                    'Minimal harus ada satu approver.'
+                )
+    
+        return res
 
 class ApprovalConfigLine(models.Model):
     _name = 'universal_approval.config_line'
