@@ -18,12 +18,18 @@ class UniversalApprovalConfig(models.Model):
     domain = fields.Char(string='Filter Domain', default='[]', tracking=True, help="Filter domain untuk menentukan record yang akan menggunakan rule ini. Contoh: [('state', '=', 'draft')]")
     sequence = fields.Integer(string='Sequence Rule', default=10, tracking=True, help="Urutan rule jika ada beberapa rule untuk model yang sama. Rule dengan sequence lebih kecil akan dievaluasi lebih dulu.")
 
+    category_id = fields.Many2one(
+        'universal_approval.config_category',
+        string='Category',
+        ondelete='restrict'
+    )
+    
     tag_ids = fields.Many2many(
             'universal_approval.config_tag',
             string='Tags',
             ondelete='restrict'
         )
-
+    
     # Ganti Many2many menjadi One2many ke model line
     approver_line_ids = fields.One2many(
         'universal_approval.config_line', 
@@ -158,5 +164,25 @@ class ApprovalConfigLine(models.Model):
 
 class ApprovalConfigTag(models.Model):
     _name = 'universal_approval.config_tag'
-
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    
     name = fields.Char(string='Tag', required=True)
+
+class ApprovalConfigCategory(models.Model):
+    _name = 'universal_approval.config_category'
+    _inherit = ['mail.thread', 'mail.activity.mixin']
+    
+    name = fields.Char(string='Category', required=True)
+
+    parent_id = fields.Many2one(
+        'universal_approval.config_category',
+        string='Parent Category',
+        index=True,
+        ondelete='restrict',
+    )
+
+    child_ids = fields.One2many(
+        'universal_approval.config_category',
+        'parent_id',
+        string='Child Categories',
+    )

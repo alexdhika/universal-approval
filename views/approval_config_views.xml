@@ -19,6 +19,7 @@
                             <field name="allowed_model_ids" invisible="1"/>
                             <field name="model_name" invisible="1"/>
                             <field name="sequence"/>
+                            <field name="category_id"/>
                             <field name="tag_ids" widget="many2many_tags" options="{'no_create': True, 'no_open': True}"/>
                         </group>
                     </group>
@@ -71,13 +72,24 @@
             <search string="Approval Config">
                 <field name="name"/>
 
-                <group>
-                    <filter
-                        string="Tags"
-                        name="group_by_tags"
-                        context="{'group_by': 'tag_ids'}"
+                <searchpanel>
+                    <field
+                        name="model_id"
+                        string="Model"
                     />
-                </group>
+            
+                    <field
+                        name="category_id"
+                        string="Category"
+                    />
+
+                    <field
+                        name="tag_ids"
+                        string="Tags"
+                        select="multi"
+                        widget="many2many_tags"
+                    />
+                </searchpanel>
             </search>
         </field>
     </record>
@@ -89,6 +101,7 @@
         <field name="view_mode">list,form</field>
         <field name="context">
             {
+                'search_default_group_by_model': 1,
                 'search_default_group_by_tags': 1,
             }
         </field>

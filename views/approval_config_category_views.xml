@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<odoo>
+
+    <!-- List View -->
+    <record id="view_approval_config_category_list" model="ir.ui.view">
+        <field name="name">universal.approval.config.category.list</field>
+        <field name="model">universal_approval.config_category</field>
+        <field name="arch" type="xml">
+            <list string="Approval Categories">
+                <field name="name"/>
+                <field name="parent_id"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Search Panel View -->
+    <record id="view_approval_config_category_search" model="ir.ui.view">
+        <field name="name">universal.approval.config.category.search</field>
+        <field name="model">universal_approval.config_category</field>
+        <field name="arch" type="xml">
+            <search string="Approval Categories">
+                <field name="name"/>
+                <searchpanel>
+                    <field name="parent_id"/>
+                </searchpanel>
+            </search>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="view_approval_config_category_form" model="ir.ui.view">
+        <field name="name">universal.approval.config.category.form</field>
+        <field name="model">universal_approval.config_category</field>
+        <field name="arch" type="xml">
+            <form string="Approval Category">
+                <sheet>
+                    <group>
+                        <field name="name"/>
+                        <field name="parent_id"/>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+
+    <!-- Action -->
+    <record id="action_approval_config_category" model="ir.actions.act_window">
+        <field name="name">Approval Categories</field>
+        <field name="res_model">universal_approval.config_category</field>
+        <field name="view_mode">list,form</field>
+    </record>
+
+
+</odoo>

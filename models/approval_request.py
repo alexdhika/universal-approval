@@ -1,7 +1,6 @@
 from odoo import models, fields, api, _
 from odoo.exceptions import UserError
 
-
 class UniversalApprovalRequest(models.Model):
     _name = 'universal_approval.request'
     _description = 'Approval Request'
@@ -12,7 +11,7 @@ class UniversalApprovalRequest(models.Model):
     user_id = fields.Many2one('res.users', string='Approver', required=True)
     sequence = fields.Integer(string='Sequence', default=10)
     approve_date = fields.Datetime(string='Approve/Reject Date', readonly=True)
-    note = fields.Text(string='Note')
+    note = fields.Text(string='Note', readonly=True)
     
     state = fields.Selection([
         ('waiting', 'Waiting'),   # Belum giliran
@@ -84,7 +83,31 @@ class UniversalApprovalRequest(models.Model):
             'res_id': self.res_id,
             'target': 'current',
         }
-        
+
+    def action_edit_note(self):
+        self.ensure_one()
+
+        return {
+            'type': 'ir.actions.act_window',
+            'name': _('Edit Note'),
+            'res_model': 'universal_approval.edit_note_wizard',
+            'view_mode': 'form',
+            'target': 'new',
+            'context': {
+                'default_approval_request_id': self.id,
+                'default_note': self.note,
+            },
+        }
+
+    def _after_note_updated(self):
+        self.ensure_one()
+
+        record = self.env[self.res_model].browse(self.res_id)
+
+        if hasattr(record, '_after_approval_note_updated'):
+            record._after_approval_note_updated(self)
+
+
 class UniversalRejectWizard(models.TransientModel):
     _name = 'universal_approval.reject_wizard'
     _description = 'Reject Wizard'
@@ -117,3 +140,28 @@ class UniversalRejectWizard(models.TransientModel):
         target_record = self.env[active_model].browse(active_id)
         target_record.approval_state = 'rejected'
         target_record._notify_rejection()
+
+class UniversalEditNoteWizard(models.TransientModel):
+    _name = 'universal_approval.edit_note_wizard'
+    _description = 'Edit Approval Note'
+
+    approval_request_id = fields.Many2one(
+        'universal_approval.request',
+        required=True,
+        readonly=True,
+    )
+
+    note = fields.Text()
+
+    def action_save(self):
+        self.ensure_one()
+
+        approval = self.approval_request_id
+
+        # SAVE NOTE
+        approval.note = self.note
+
+        # AFTER SAVE
+        approval._after_note_updated()
+
+        return {'type': 'ir.actions.act_window_close'}

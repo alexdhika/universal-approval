@@ -1,0 +1,26 @@
+<odoo>
+    <record id="view_universal_approval_edit_approver_note_wizard_form" model="ir.ui.view">
+        <field name="name">universal_approval.edit.approver.note.wizard.form</field>
+        <field name="model">universal_approval.edit_note_wizard</field>
+        <field name="arch" type="xml">
+            <form string="Edit Note">
+                <group>
+                    <field name="note" placeholder="Enter your note..."/>
+                </group>
+    
+                <footer>
+                    <button
+                        name="action_save"
+                        type="object"
+                        string="Save"
+                        class="btn-primary"
+                    />
+                    <button
+                        string="Cancel"
+                        special="cancel"
+                    />
+                </footer>
+            </form>
+        </field>
+    </record>
+</odoo>

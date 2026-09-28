@@ -23,10 +23,12 @@ Long description of module's purpose
     'data': [
         'security/ir.model.access.csv',
         'views/approval_config_views.xml',
+        'views/approval_config_category_views.xml',
         'views/approval_config_tag_views.xml',
         'views/approval_request_views.xml',
         'views/menu_views.xml',
         'views/reject_wizard_views.xml',
+        'views/edit_note_wizard_views.xml',
     ],
     'license': 'LGPL-3',
 }

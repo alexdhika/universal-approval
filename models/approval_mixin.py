@@ -71,7 +71,7 @@ class UniversalApprovalMixin(models.AbstractModel):
             # 1. AMBIL RULE
             # =========================================================
     
-            rules = self.env['universal_approval.config'].search([
+            rules = self.env['universal_approval.config'].sudo().search([
                 ('model_id.model', '=', rec._name)
             ], order='sequence asc')
     
@@ -249,7 +249,7 @@ class UniversalApprovalMixin(models.AbstractModel):
     def action_request_approval1(self):
         """Mengevaluasi rule, mencegah duplikasi approver, dan membuat request approval"""
         for rec in self:
-            rules = self.env['universal_approval.config'].search([
+            rules = self.env['universal_approval.config'].sudo().search([
                 ('model_id.model', '=', rec._name)
             ], order='sequence asc')
 
@@ -411,14 +411,13 @@ class UniversalApprovalMixin(models.AbstractModel):
         """Mengirim email ke user yang ditentukan di config setelah ada request yang ditolak"""
         for rec in self:
             # Cari konfigurasi untuk model ini
-            config = self.env['universal_approval.config'].search([
+            config = self.env['universal_approval.config'].sudo().search([
                 ('model_id.model', '=', rec._name)
             ], limit=1)
 
             if config:
                 # Kirim email ke user yang ditentukan di config
                 notify_users = config.rejected_notify_user_ids
-
                 if notify_users:
                     for user in notify_users:
                         if user.email:
