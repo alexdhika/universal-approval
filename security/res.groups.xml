@@ -1,0 +1,26 @@
+<odoo>
+
+    <!-- Privilege -->
+    <record id="privilege_universal_approval" model="res.groups.privilege">
+        <field name="name">Universal Approval</field>
+        <field name="sequence">20</field>
+        <field name="category_id" ref="base.module_category_master_data"/>
+    </record>
+
+    <!-- User -->
+    <record id="group_universal_approval_user" model="res.groups">
+        <field name="name">User</field>
+        <field name="sequence">10</field>
+        <field name="privilege_id" ref="privilege_universal_approval"/>
+    </record>
+
+    <!-- Administrator -->
+    <record id="group_universal_approval_manager" model="res.groups">
+        <field name="name">Administrator</field>
+        <field name="sequence">20</field>
+        <field name="privilege_id" ref="privilege_universal_approval"/>
+        <field name="implied_ids"
+               eval="[(4, ref('group_universal_approval_user'))]"/>
+    </record>
+
+</odoo>

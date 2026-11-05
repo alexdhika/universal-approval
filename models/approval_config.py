@@ -69,6 +69,12 @@ class UniversalApprovalConfig(models.Model):
         help="Daftar user yang akan dikirim notifikasi setelah dokumen ditolak oleh semua level approver."
     )
 
+    reject_behavior = fields.Selection([
+        ('stop', 'Stop Approval'),
+        ('restart', 'Restart Approval'),
+        ('resume', 'Resume Approval'),
+    ], string='On Rejection', default='stop', required=True)
+    
     @api.depends()
     def _compute_allowed_model_ids(self):
         """
@@ -153,14 +159,15 @@ class UniversalApprovalConfig(models.Model):
 class ApprovalConfigLine(models.Model):
     _name = 'universal_approval.config_line'
     _description = 'Universal Approval Configuration Line'
+    _rec_name = 'user_id'
     _order = 'sequence, id'  # Mengurutkan otomatis berdasarkan sequence
 
     config_id = fields.Many2one('universal_approval.config', string='Universal Approval Config', ondelete='cascade')
     sequence = fields.Integer(string='Level / Step', default=10)
     user_id = fields.Many2one('res.users', string='Approver', required=True)
-    
-    # Opsi Tambahan: Boleh berbentuk Role/Group alih-alih spesifik 1 User
-    # group_id = fields.Many2one('res.groups', string='Approver Group')
+    show_return_button = fields.Boolean(string='Show Return Button', default=False)
+    is_additional_approver = fields.Boolean(string='Is Additional Approver', default=False)
+    allow_add_additional_approvers = fields.Boolean(string='Allow Add Additional Approvers', default=False)
 
 class ApprovalConfigTag(models.Model):
     _name = 'universal_approval.config_tag'
@@ -185,4 +192,9 @@ class ApprovalConfigCategory(models.Model):
         'universal_approval.config_category',
         'parent_id',
         string='Child Categories',
+    )
+
+    _check_parent_not_self = models.Constraint(
+        'CHECK(parent_id IS NULL OR parent_id != id)',
+        'A category cannot be its own parent.',
     )

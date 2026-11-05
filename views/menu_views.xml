@@ -5,7 +5,8 @@
     <menuitem id="menu_universal_approval_root" 
               name="Universal Approval" 
               web_icon="universal_approval,static/description/icon.png" 
-              sequence="300"/>
+              sequence="300"
+              groups="group_universal_approval_user"/>
 
     <!-- Configuration Root Menu -->
     <menuitem id="menu_universal_approval_config" 

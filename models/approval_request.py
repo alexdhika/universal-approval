@@ -12,6 +12,16 @@ class UniversalApprovalRequest(models.Model):
     sequence = fields.Integer(string='Sequence', default=10)
     approve_date = fields.Datetime(string='Approve/Reject Date', readonly=True)
     note = fields.Text(string='Note', readonly=True)
+    config_ids = fields.Many2many(
+        'universal_approval.config',
+        string='Configurations',
+        readonly=True,
+    )
+    config_line_id = fields.Many2one(
+        'universal_approval.config_line',
+        string='Approval Config Line',
+        ondelete='set null',
+    )
     
     state = fields.Selection([
         ('waiting', 'Waiting'),   # Belum giliran
@@ -20,45 +30,175 @@ class UniversalApprovalRequest(models.Model):
         ('rejected', 'Rejected')
     ], default='waiting')
 
-    def action_approve(self):
-        for req in self:
-            req.state = 'approved'
-            req.approve_date = fields.Datetime.now()
-            req.note = 'Approved by %s' % self.env.user.name
-            # Cari seluruh request untuk dokumen yang sama
-            all_requests = self.search([
-                ('res_model', '=', req.res_model),
-                ('res_id', '=', req.res_id)
-            ])
-            
-            # 1. Cek apakah masih ada request lain di sequence/level yang sama yang belum approved
-            same_level_pending = all_requests.filtered(
-                lambda r: r.sequence == req.sequence and r.state != 'approved'
-            )
-            
-            # 2. Jika level saat ini SUDAH LENGKAP di-approve semua
-            if not same_level_pending:
-                # Cari sequence berikutnya yang masih 'waiting'
-                waiting_requests = all_requests.filtered(lambda r: r.state == 'waiting')
+    res_model_name = fields.Char(
+        string='Model',
+        compute='_compute_res_model_name',
+    )
+    
+    @api.depends('res_model')
+    def _compute_res_model_name(self):
+        IrModel = self.env['ir.model']
+    
+        for record in self:
+            if record.res_model:
+                model = IrModel._get(record.res_model)
+                record.res_model_name = model.name if model else record.res_model
+            else:
+                record.res_model_name = False
                 
-                if waiting_requests:
-                    # Ambil sequence paling kecil dari level yang sedang menunggu
-                    next_sequence = min(waiting_requests.mapped('sequence'))
-                    next_level_requests = waiting_requests.filtered(lambda r: r.sequence == next_sequence)
-                    
-                    # Ubah status level berikutnya menjadi 'pending'
-                    next_level_requests.write({'state': 'pending'})
-                    
-                    # Triggers notifikasi ke approver level berikutnya
-                    target_record = self.env[req.res_model].browse(req.res_id)
-                    target_record._notify_next_approvers()
-                else:
-                    # Jika tidak ada lagi yang 'waiting', berarti SELURUH LEVEL SUDAH APPROVED
-                    target_record = self.env[req.res_model].browse(req.res_id)
-                    target_record.approval_state = 'approved'
-                    # kirim notifikasi ke user yang ditentukan di config
-                    target_record._notify_final_approval()
+    def action_approve(self):
+        self.ensure_one()
+    
+        # Hanya request yang sedang pending yang boleh di-approve
+        if self.state != 'pending':
+            raise UserError(
+                _("Approval request ini tidak sedang menunggu approval.")
+            )
+    
+        # Cek apakah approver ini diperbolehkan menambahkan
+        # additional approver
+        if self.config_line_id.allow_add_additional_approvers:
+            
+            return {
+                'name': _('Add Additional Approvers'),
+                'type': 'ir.actions.act_window',
+                'res_model': 'universal_approval.additional_approver_wizard',
+                'view_mode': 'form',
+                'target': 'new',
+                'context': {
+                    'default_approval_request_id': self.id,
+                },
+            }
+    
+        # Tidak boleh menambahkan additional approver
+        return self._do_approve()
 
+    def _do_approve(self, additional_config_lines=None):
+        self.ensure_one()
+    
+        req = self
+
+        ApprovalRequest = self.env['universal_approval.request']
+    
+        # =========================================================
+        # 1. APPROVE REQUEST INI
+        # =========================================================
+    
+        req.sudo().write({
+            'state': 'approved',
+            'approve_date': fields.Datetime.now(),
+            'note': 'Approved by %s' % self.env.user.name,
+        })
+    
+        # =========================================================
+        # 2. TAMBAHKAN ADDITIONAL APPROVER
+        # =========================================================
+    
+        if additional_config_lines:
+    
+            existing_requests = ApprovalRequest.sudo().search([
+                ('res_model', '=', req.res_model),
+                ('res_id', '=', req.res_id),
+            ])
+    
+            existing_user_ids = set(
+                existing_requests.mapped('user_id').ids
+            )
+    
+            for config_line in additional_config_lines:
+    
+                user_id = config_line.user_id.id
+    
+                # Jangan buat duplicate approver
+                if user_id in existing_user_ids:
+                    continue
+    
+                ApprovalRequest.sudo().create({
+                    'res_model': req.res_model,
+                    'res_id': req.res_id,
+                    'user_id': user_id,
+                    'sequence': config_line.sequence,
+                    'state': 'waiting',
+                    'config_ids': [
+                        (6, 0, config_line.config_id.ids)
+                    ],
+                    'config_line_id': config_line.id,
+                })
+    
+                existing_user_ids.add(user_id)
+    
+        # =========================================================
+        # 3. CARI SEMUA REQUEST
+        # =========================================================
+    
+        all_requests = ApprovalRequest.sudo().search([
+            ('res_model', '=', req.res_model),
+            ('res_id', '=', req.res_id),
+        ])
+    
+        # =========================================================
+        # 4. CEK APAKAH LEVEL SAAT INI SUDAH SELESAI
+        # =========================================================
+    
+        same_level_pending = all_requests.filtered(
+            lambda r:
+                r.sequence == req.sequence
+                and r.state not in ('approved', 'rejected')
+        )
+    
+        if not same_level_pending:
+    
+            # =====================================================
+            # 5. CARI LEVEL BERIKUTNYA
+            # =====================================================
+    
+            waiting_requests = all_requests.filtered(
+                lambda r: r.state == 'waiting'
+            )
+    
+            if waiting_requests:
+    
+                next_sequence = min(
+                    waiting_requests.mapped('sequence')
+                )
+    
+                next_level_requests = waiting_requests.filtered(
+                    lambda r: r.sequence == next_sequence
+                )
+    
+                next_level_requests.sudo().write({
+                    'state': 'pending'
+                })
+    
+                target_record = self.env[req.res_model].sudo().browse(
+                    req.res_id
+                )
+    
+                target_record._notify_next_approvers()
+    
+            else:
+    
+                # =================================================
+                # 6. SEMUA APPROVER SUDAH SELESAI
+                # =================================================
+    
+                target_record = self.env[req.res_model].sudo().browse(
+                    req.res_id
+                )
+    
+                target_record.approval_state = 'approved'
+    
+                target_record._notify_final_approval()
+
+    def action_return(self):
+        self.ensure_one()
+        self.approve_date = fields.Datetime.now()
+        self.note = 'Returned by %s' % self.env.user.name
+        target_record = self.env[self.res_model].browse(self.res_id)
+        target_record.approval_state = 'draft'
+        # kirim notifikasi ke user yang ditentukan di config
+        # target_record._notify_return_approval()
+        
     def action_reject(self):
         # panggil wizard untuk input note
         return {
@@ -106,62 +246,3 @@ class UniversalApprovalRequest(models.Model):
 
         if hasattr(record, '_after_approval_note_updated'):
             record._after_approval_note_updated(self)
-
-
-class UniversalRejectWizard(models.TransientModel):
-    _name = 'universal_approval.reject_wizard'
-    _description = 'Reject Wizard'
-
-    note = fields.Text(string='Rejection Note', required=True)
-
-    def action_reject(self):
-        active_id = self.env.context.get('active_id')
-        active_model = self.env.context.get('active_model')
-        if not active_id or not active_model:
-            raise UserError(_("No active record found for rejection."))
-
-        # Cari request yang sedang 'pending' untuk user yang sedang login
-        pending_request = self.env['universal_approval.request'].search([
-            ('res_model', '=', active_model),
-            ('res_id', '=', active_id),
-            ('user_id', '=', self.env.user.id),
-            ('state', '=', 'pending')
-        ], limit=1)
-
-        if not pending_request:
-            raise UserError(_("You do not have a pending approval request for this record."))
-
-        # Update status request menjadi 'rejected'
-        pending_request.state = 'rejected'
-        pending_request.approve_date = fields.Datetime.now()
-        pending_request.note = self.note
-
-        # Update status dokumen menjadi 'rejected'
-        target_record = self.env[active_model].browse(active_id)
-        target_record.approval_state = 'rejected'
-        target_record._notify_rejection()
-
-class UniversalEditNoteWizard(models.TransientModel):
-    _name = 'universal_approval.edit_note_wizard'
-    _description = 'Edit Approval Note'
-
-    approval_request_id = fields.Many2one(
-        'universal_approval.request',
-        required=True,
-        readonly=True,
-    )
-
-    note = fields.Text()
-
-    def action_save(self):
-        self.ensure_one()
-
-        approval = self.approval_request_id
-
-        # SAVE NOTE
-        approval.note = self.note
-
-        # AFTER SAVE
-        approval._after_note_updated()
-
-        return {'type': 'ir.actions.act_window_close'}

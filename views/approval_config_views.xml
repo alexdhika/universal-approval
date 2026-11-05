@@ -18,7 +18,8 @@
                             <field name="model_id" options="{'no_create': True, 'no_open': True}"/>
                             <field name="allowed_model_ids" invisible="1"/>
                             <field name="model_name" invisible="1"/>
-                            <field name="sequence"/>
+                            <field name="reject_behavior"/>
+                            <!-- <field name="sequence"/> -->
                             <field name="category_id"/>
                             <field name="tag_ids" widget="many2many_tags" options="{'no_create': True, 'no_open': True}"/>
                         </group>
@@ -30,11 +31,30 @@
                     <notebook>
                         <page string="Approver Levels (Sequential)" name="approvers">
                             <field name="approver_line_ids">
-                                <list editable="bottom">
+                                <list>
                                     <!-- Handle untuk drag and drop urutan sequence -->
                                     <field name="sequence" widget="handle"/>
                                     <field name="user_id" options="{'no_create': True, 'no_open': True}"/>
+                                    <field name="show_return_button"/>
+                                    <field name="allow_add_additional_approvers"/>
+                                    <field name="is_additional_approver"/>
                                 </list>
+                                <form>
+                                    <sheet>
+                                        <group>
+                                            <group>
+                                                <field name="config_id" readonly="1"/>
+                                                <field name="user_id"
+                                                        options="{'no_create': True, 'no_open': True}"/>
+                                                <field name="show_return_button"/>
+                                                <field name="allow_add_additional_approvers"/>
+                                            </group>
+                                            <group>
+                                                <field name="is_additional_approver"/>
+                                            </group>
+                                        </group>
+                                    </sheet>
+                                </form>
                             </field>
                         </page>
                         <page string="Notification Settings" name="notifications">
@@ -59,6 +79,11 @@
                 <field name="sequence" widget="handle"/>
                 <field name="name"/>
                 <field name="model_id"/>
+                <field name="reject_behavior"
+                       widget="badge"
+                       decoration-danger="reject_behavior == 'stop'"
+                       decoration-success="reject_behavior == 'resume'"
+                       decoration-info="reject_behavior == 'restart'"/>
                 <field name="approver_line_ids"/>
             </list>
         </field>
